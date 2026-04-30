@@ -1,0 +1,1672 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="FamilyMeal" />
+<meta name="theme-color" content="#2E7D5E" />
+<meta name="description" content="Planificador semanal de comidas para tu familia" />
+<link rel="manifest" id="manifest-placeholder" />
+<title>FamilyMeal — Planificador de Comidas</title>
+<script>
+// ── Inline PWA manifest (works from file:// and http://) ──────────────
+(function() {
+  const icons = [{
+    src: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%232E7D5E'/><text y='130' x='50%' text-anchor='middle' font-size='110'>🍽️</text></svg>`),
+    sizes: "192x192", type: "image/svg+xml", purpose: "any maskable"
+  },{
+    src: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%232E7D5E'/><text y='360' x='50%' text-anchor='middle' font-size='300'>🍽️</text></svg>`),
+    sizes: "512x512", type: "image/svg+xml", purpose: "any maskable"
+  }];
+  const manifest = {
+    name: "FamilyMeal — Planificador de Comidas",
+    short_name: "FamilyMeal",
+    description: "Planificador semanal de comidas para tu familia",
+    start_url: "./",
+    display: "standalone",
+    background_color: "#FDFAF6",
+    theme_color: "#2E7D5E",
+    orientation: "portrait-primary",
+    lang: "es",
+    icons
+  };
+  const blob = new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'});
+  const url = URL.createObjectURL(blob);
+  document.getElementById('manifest-placeholder').href = url;
+
+  // ── Service Worker for offline ──────────────────────────────────────
+  if ('serviceWorker' in navigator) {
+    const swCode = `
+const CACHE = 'familymeal-v1';
+const URLS = [
+  'https://unpkg.com/react@18/umd/react.development.js',
+  'https://unpkg.com/react-dom@18/umd/react-dom.development.js',
+  'https://unpkg.com/@babel/standalone/babel.min.js'
+];
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(URLS).catch(()=>{})));
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));
+  self.clients.claim();
+});
+self.addEventListener('fetch', e => {
+  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).catch(()=>new Response('Offline', {status:503}))));
+});`;
+    const swBlob = new Blob([swCode], {type:'application/javascript'});
+    const swUrl = URL.createObjectURL(swBlob);
+    navigator.serviceWorker.register(swUrl).catch(()=>{});
+  }
+})();
+</script>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  :root {
+    --bg: #FDFAF6;
+    --bg2: #F5F0E8;
+    --bg3: #EDE8DE;
+    --card: #FFFFFF;
+    --border: #D8D2C6;
+    --border2: #C4BCAA;
+    --text: #1A1714;
+    --text2: #5C5650;
+    --text3: #8C867E;
+    --accent: #2E7D5E;
+    --accent2: #236049;
+    --accent-bg: #E8F5EE;
+    --amber: #B85A0A;
+    --amber-bg: #FDF0E0;
+    --rose: #9B3A4A;
+    --rose-bg: #FDEEF0;
+    --blue: #1E5FA8;
+    --blue-bg: #EBF2FC;
+    --purple: #5B3E8C;
+    --purple-bg: #F2EDFC;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+    --radius: 10px;
+    --radius-lg: 14px;
+    --font-display: 'Georgia', 'Times New Roman', serif;
+    --font-body: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-body); background: var(--bg); color: var(--text); min-height: 100vh; }
+  button { cursor: pointer; font-family: inherit; }
+  input, textarea, select { font-family: inherit; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .app-shell { display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; min-width: 220px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .sidebar-logo { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); }
+  .sidebar-logo h1 { font-family: var(--font-display); font-size: 20px; color: var(--accent2); font-weight: 700; letter-spacing: -0.3px; }
+  .sidebar-logo p { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .sidebar-nav { padding: 12px 8px; flex: 1; }
+  .nav-section { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; padding: 8px 12px 4px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius); cursor: pointer; font-size: 14px; color: var(--text2); transition: all 0.15s; margin-bottom: 2px; border: none; background: none; width: 100%; text-align: left; }
+  .nav-item:hover { background: var(--bg2); color: var(--text); }
+  .nav-item.active { background: var(--accent-bg); color: var(--accent2); font-weight: 600; }
+  .nav-item .icon { font-size: 16px; min-width: 20px; text-align: center; }
+  .sidebar-footer { padding: 12px; border-top: 1px solid var(--border); }
+  .family-badge { background: var(--bg2); border-radius: var(--radius); padding: 10px 12px; font-size: 12px; }
+  .family-badge .name { font-weight: 600; color: var(--text); font-size: 13px; }
+  .family-badge .sub { color: var(--text3); margin-top: 1px; }
+
+  .main-content { flex: 1; overflow-y: auto; }
+  .page-header { padding: 24px 28px 16px; border-bottom: 1px solid var(--border); background: var(--card); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .page-header h2 { font-family: var(--font-display); font-size: 22px; color: var(--text); font-weight: 700; }
+  .page-header p { font-size: 13px; color: var(--text3); margin-top: 2px; }
+  .page-body { padding: 24px 28px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500; border: 1px solid transparent; transition: all 0.15s; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-secondary { background: var(--card); color: var(--text); border-color: var(--border); }
+  .btn-secondary:hover { background: var(--bg2); }
+  .btn-ghost { background: none; color: var(--text2); }
+  .btn-ghost:hover { background: var(--bg2); color: var(--text); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-danger { background: var(--rose-bg); color: var(--rose); border-color: #F0C0C8; }
+  .btn-amber { background: var(--amber-bg); color: var(--amber); border-color: #F0D0A8; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--shadow); }
+  .card-sm { padding: 12px; }
+
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: var(--accent-bg); color: var(--accent2); }
+  .badge-amber { background: var(--amber-bg); color: var(--amber); }
+  .badge-rose { background: var(--rose-bg); color: var(--rose); }
+  .badge-blue { background: var(--blue-bg); color: var(--blue); }
+  .badge-purple { background: var(--purple-bg); color: var(--purple); }
+  .badge-gray { background: var(--bg2); color: var(--text2); }
+
+  .tag { display: inline-flex; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; background: var(--bg2); color: var(--text2); }
+
+  .input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--card); color: var(--text); outline: none; transition: border-color 0.15s; }
+  .input:focus { border-color: var(--accent); }
+  .textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--card); color: var(--text); outline: none; resize: vertical; min-height: 80px; transition: border-color 0.15s; }
+  .textarea:focus { border-color: var(--accent); }
+  .select { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--card); color: var(--text); outline: none; }
+  .label { font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 5px; display: block; }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal { background: var(--card); border-radius: var(--radius-lg); width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-md); }
+  .modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .modal-header h3 { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+  .modal-body { padding: 20px 24px; }
+  .modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .gap-8 { gap: 8px; }
+
+  .week-grid { display: grid; grid-template-columns: 90px repeat(7, 1fr); gap: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .week-col-header { background: var(--bg2); padding: 8px; text-align: center; font-size: 12px; font-weight: 600; color: var(--text2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+  .week-col-header:last-child { border-right: none; }
+  .week-row-label { background: var(--bg2); padding: 8px 10px; font-size: 11px; font-weight: 600; color: var(--text2); display: flex; align-items: center; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2; }
+  .week-cell { padding: 6px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); min-height: 72px; position: relative; }
+  .week-cell:last-child { border-right: none; }
+  .meal-chip { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font-size: 11px; cursor: pointer; transition: all 0.15s; position: relative; line-height: 1.3; }
+  .meal-chip:hover { border-color: var(--accent); box-shadow: var(--shadow); }
+  .meal-chip .meal-name { font-weight: 500; color: var(--text); }
+  .meal-chip .meal-time { color: var(--text3); font-size: 10px; margin-top: 1px; }
+  .meal-chip-empty { border-style: dashed; background: var(--bg); color: var(--text3); font-size: 11px; display: flex; align-items: center; justify-content: center; min-height: 52px; border-radius: 6px; cursor: pointer; }
+  .meal-chip-empty:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+  .meal-cat-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+  .recipe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .recipe-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; transition: all 0.18s; box-shadow: var(--shadow); }
+  .recipe-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .recipe-card-img { height: 130px; background: linear-gradient(135deg, var(--bg2) 0%, var(--bg3) 100%); display: flex; align-items: center; justify-content: center; font-size: 36px; }
+  .recipe-card-body { padding: 12px 14px; }
+  .recipe-card-title { font-weight: 600; font-size: 14px; color: var(--text); line-height: 1.3; margin-bottom: 6px; }
+  .recipe-card-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .recipe-card-actions { display: flex; gap: 6px; margin-top: 10px; }
+
+  .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .inventory-item { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; align-items: center; gap: 8px; }
+  .inventory-item .icon { font-size: 20px; }
+  .inventory-item .name { font-size: 13px; font-weight: 500; flex: 1; }
+  .inventory-item .qty { font-size: 11px; color: var(--text3); }
+
+  .shopping-section { margin-bottom: 16px; }
+  .shopping-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 8px 12px; background: var(--bg2); border-radius: var(--radius); }
+  .shopping-section-header .sec-icon { font-size: 18px; }
+  .shopping-section-header .sec-name { font-weight: 600; font-size: 14px; }
+  .shopping-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius); cursor: pointer; transition: background 0.1s; }
+  .shopping-item:hover { background: var(--bg2); }
+  .shopping-item.checked { opacity: 0.5; }
+  .shopping-item .check { width: 18px; height: 18px; border: 1.5px solid var(--border2); border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .shopping-item.checked .check { background: var(--accent); border-color: var(--accent); color: white; font-size: 11px; }
+  .shopping-item .item-name { font-size: 14px; flex: 1; }
+  .shopping-item .item-qty { font-size: 13px; color: var(--text3); font-weight: 500; }
+  .shopping-item.checked .item-name { text-decoration: line-through; }
+
+  .ai-box { background: var(--accent-bg); border: 1px solid #B8DFC8; border-radius: var(--radius-lg); padding: 16px; }
+  .ai-box .ai-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .ai-box .ai-title { font-weight: 600; color: var(--accent2); font-size: 14px; }
+  .ai-response { font-size: 13px; color: var(--text); line-height: 1.6; white-space: pre-wrap; }
+  .ai-thinking { display: flex; gap: 4px; align-items: center; }
+  .ai-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  .ai-dot:nth-child(2) { animation-delay: 0.2s; }
+  .ai-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse { 0%,80%,100%{opacity:0.3} 40%{opacity:1} }
+
+  .tabs { display: flex; gap: 4px; background: var(--bg2); border-radius: var(--radius); padding: 3px; }
+  .tab { padding: 6px 14px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; transition: all 0.15s; border: none; background: none; }
+  .tab.active { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; }
+  .stat-num { font-size: 28px; font-weight: 700; font-family: var(--font-display); color: var(--text); }
+  .stat-label { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+  .progress-bar { height: 6px; background: var(--bg2); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
+
+  .empty-state { text-align: center; padding: 48px 24px; }
+  .empty-state .es-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state h3 { font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .empty-state p { font-size: 14px; color: var(--text3); margin-bottom: 16px; }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .flex { display: flex; }
+  .flex-col { flex-direction: column; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .gap-6 { gap: 6px; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .gap-16 { gap: 16px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-4 { margin-bottom: 4px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-16 { margin-bottom: 16px; }
+  .flex-1 { flex: 1; }
+  .text-sm { font-size: 13px; }
+  .text-xs { font-size: 11px; }
+  .text-muted { color: var(--text3); }
+  .font-semibold { font-weight: 600; }
+  .wrap { flex-wrap: wrap; }
+
+  /* ── Bottom nav bar (mobile only) ───────────────────────────── */
+  .bottom-nav { display: none; }
+
+  @media (max-width: 700px) {
+    /* Hide desktop sidebar completely */
+    .sidebar { display: none; }
+    /* Push content up so bottom nav doesn't cover it */
+    .main-content { padding-bottom: 70px; }
+    .page-body { padding: 14px 12px; }
+    .page-header { padding: 16px 14px 12px; flex-wrap: wrap; gap: 10px; }
+    .page-header h2 { font-size: 18px; }
+    /* Grids stack on mobile */
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    /* Week grid scrolls horizontally */
+    .week-grid { grid-template-columns: 52px repeat(7, minmax(80px,1fr)); font-size: 10px; }
+    /* Modal full-screen on mobile */
+    .modal-overlay { padding: 0; align-items: flex-end; }
+    .modal { border-radius: 20px 20px 0 0; max-height: 94vh; }
+    /* Recipe grid single column */
+    .recipe-grid { grid-template-columns: 1fr; }
+    /* Inventory grid 2 cols */
+    .inventory-grid { grid-template-columns: 1fr 1fr; }
+    /* Week cell smaller */
+    .week-cell { min-height: 60px; padding: 4px; }
+    .meal-chip { font-size: 10px; }
+    /* Stat cards 2 cols */
+    .grid-4 { grid-template-columns: 1fr 1fr !important; }
+    /* Bottom nav visible */
+    .bottom-nav {
+      display: flex;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      z-index: 100;
+      padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+    }
+    .bottom-nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 4px 2px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-radius: 10px;
+      margin: 0 2px;
+      transition: background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .bottom-nav-item:active { background: var(--bg2); }
+    .bottom-nav-item.active { color: var(--accent2); }
+    .bottom-nav-item .bn-icon { font-size: 22px; line-height: 1; }
+    .bottom-nav-item .bn-label { font-size: 10px; font-weight: 600; color: inherit; line-height: 1; }
+    .bottom-nav-item.active .bn-label { color: var(--accent2); }
+    .bottom-nav-item:not(.active) .bn-label { color: var(--text3); }
+  }
+
+  /* Tablet: compact sidebar with icons + labels */
+  @media (min-width: 701px) and (max-width: 1000px) {
+    .sidebar { width: 72px; min-width: 72px; }
+    .sidebar-logo h1, .sidebar-logo p, .nav-item span:not(.icon), .nav-section,
+    .family-badge .name, .family-badge .sub { display: none; }
+    .nav-item { justify-content: center; padding: 10px 6px; }
+    .nav-item .icon { font-size: 22px; }
+    .sidebar-footer { padding: 8px; }
+    .family-badge { padding: 6px; text-align: center; }
+    .page-body { padding: 16px; }
+    .week-grid { grid-template-columns: 58px repeat(7, 1fr); font-size: 10px; }
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ─── DATA ───────────────────────────────────────────────────────────────
+const INITIAL_RECIPES = [
+  { id: 1, name: "Milanesas al horno con papas", category: "cena", emoji: "🍖", source: "Paulina Cocina", time: 45, difficulty: "fácil", servings: 4, favorite: true, tags: ["horno","clásico"],
+    ingredients: [{name:"Milanesas de ternera",qty:8,unit:"unidades"},{name:"Papas",qty:4,unit:"grandes"},{name:"Pan rallado",qty:1,unit:"taza"},{name:"Huevos",qty:2,unit:"unidades"},{name:"Ajo",qty:3,unit:"dientes"},{name:"Perejil",qty:1,unit:"puñado"},{name:"Aceite de oliva",qty:3,unit:"cdas"},{name:"Sal y pimienta",qty:1,unit:"c/n"}],
+    steps:["Precalentar el horno a 200°C.","Batir los huevos con sal, pimienta y ajo picado.","Pasar las milanesas por huevo y luego por pan rallado.","Cortar las papas en gajos, condimentar con aceite, sal y ajo.","Distribuir en una asadera y hornear 35-40 minutos, dando vuelta a mitad de cocción."] },
+  { id: 2, name: "Tarta de verduras con ricota", category: "almuerzo", emoji: "🥧", source: "Paulina Cocina", time: 60, difficulty: "media", servings: 4, favorite: true, tags: ["vegetariano","tarta"],
+    ingredients: [{name:"Masa quebrada",qty:1,unit:"unidad"},{name:"Ricota",qty:250,unit:"g"},{name:"Espinaca",qty:2,unit:"atados"},{name:"Cebolla",qty:1,unit:"grande"},{name:"Huevos",qty:3,unit:"unidades"},{name:"Queso rallado",qty:100,unit:"g"},{name:"Nuez moscada",qty:1,unit:"pizca"},{name:"Sal y pimienta",qty:1,unit:"c/n"}],
+    steps:["Blanquear la espinaca y escurrir muy bien.","Rehogar la cebolla hasta que esté transparente.","Mezclar ricota, espinaca, cebolla, huevos y queso. Salpimentar.","Forrar el molde con la masa y volcar el relleno.","Hornear a 180°C durante 40 minutos."] },
+  { id: 3, name: "Sopa de fideos con caldo casero", category: "cena", emoji: "🍜", source: "Paulina Cocina", time: 30, difficulty: "fácil", servings: 4, favorite: false, tags: ["rápido","sopa","invierno"],
+    ingredients: [{name:"Caldo de pollo",qty:1.5,unit:"litros"},{name:"Fideos cabello ángel",qty:200,unit:"g"},{name:"Zanahoria",qty:2,unit:"unidades"},{name:"Apio",qty:2,unit:"tallos"},{name:"Cebolla",qty:1,unit:"unidad"},{name:"Perejil",qty:1,unit:"puñado"},{name:"Sal",qty:1,unit:"c/n"}],
+    steps:["Calentar el caldo con las verduras cortadas.","Cuando hierva, agregar los fideos.","Cocinar 8-10 minutos hasta que estén al dente.","Servir con perejil fresco picado."] },
+  { id: 4, name: "Tortilla de papas española", category: "almuerzo", emoji: "🍳", source: "Clásico", time: 35, difficulty: "media", servings: 4, favorite: false, tags: ["huevos","sin carne"],
+    ingredients: [{name:"Papas",qty:4,unit:"medianas"},{name:"Huevos",qty:6,unit:"unidades"},{name:"Cebolla",qty:1,unit:"mediana"},{name:"Aceite de girasol",qty:200,unit:"ml"},{name:"Sal",qty:1,unit:"c/n"}],
+    steps:["Pelar y cortar las papas en rodajas finas.","Freír las papas con la cebolla a fuego bajo hasta que estén tiernas.","Batir los huevos con sal, agregar las papas escurridas.","Volcar en sartén caliente y cocinar tapada.","Dar vuelta con un plato y cocinar del otro lado."] },
+  { id: 5, name: "Empanadas de carne al horno", category: "cena", emoji: "🥟", source: "Paulina Cocina", time: 90, difficulty: "elaborada", servings: 4, favorite: true, tags: ["horno","fin de semana"],
+    ingredients: [{name:"Tapas de empanada",qty:24,unit:"unidades"},{name:"Carne picada",qty:500,unit:"g"},{name:"Cebolla",qty:2,unit:"unidades"},{name:"Cebolla de verdeo",qty:3,unit:"tallos"},{name:"Huevos duros",qty:2,unit:"unidades"},{name:"Aceitunas verdes",qty:100,unit:"g"},{name:"Pimentón",qty:1,unit:"cda"},{name:"Comino",qty:1,unit:"cdita"},{name:"Sal y pimienta",qty:1,unit:"c/n"}],
+    steps:["Rehogar las cebollas hasta transparentar.","Agregar la carne picada y cocinar hasta que cambie de color.","Condimentar con pimentón, comino, sal y pimienta.","Dejar enfriar y agregar huevos picados y aceitunas.","Rellenar las tapas, cerrar con repulgue y pintar con huevo.","Hornear a 200°C por 20-25 minutos."] },
+  { id: 6, name: "Avena con frutas y miel", category: "desayuno", emoji: "🥣", source: "Saludable", time: 10, difficulty: "fácil", servings: 4, favorite: false, tags: ["rápido","saludable"],
+    ingredients: [{name:"Avena",qty:2,unit:"tazas"},{name:"Leche",qty:3,unit:"tazas"},{name:"Banana",qty:2,unit:"unidades"},{name:"Manzana",qty:1,unit:"unidad"},{name:"Miel",qty:4,unit:"cdas"},{name:"Canela",qty:1,unit:"cdita"}],
+    steps:["Calentar la leche en una olla.","Agregar la avena y cocinar revolviendo 5 minutos.","Servir en bowls y agregar frutas cortadas.","Rociar con miel y espolvorear canela."] },
+  { id: 7, name: "Pollo al limón con vegetales salteados", category: "cena", emoji: "🍋", source: "Paulina Cocina", time: 40, difficulty: "media", servings: 4, favorite: true, tags: ["pollo","saludable"],
+    ingredients: [{name:"Pechuga de pollo",qty:4,unit:"unidades"},{name:"Limón",qty:2,unit:"unidades"},{name:"Ajo",qty:4,unit:"dientes"},{name:"Zucchini",qty:2,unit:"unidades"},{name:"Morrón",qty:2,unit:"unidades"},{name:"Brócoli",qty:1,unit:"cabeza"},{name:"Aceite de oliva",qty:3,unit:"cdas"},{name:"Tomillo",qty:1,unit:"ramita"},{name:"Sal y pimienta",qty:1,unit:"c/n"}],
+    steps:["Marinar el pollo con jugo de limón, ajo y tomillo por 20 minutos.","Cocinar el pollo en sartén o plancha 6-7 minutos de cada lado.","Saltear los vegetales cortados en cubos con aceite de oliva.","Servir el pollo sobre los vegetales, rociar con jugo de limón."] },
+  { id: 8, name: "Panqueques para el desayuno", category: "desayuno", emoji: "🥞", source: "Clásico", time: 20, difficulty: "fácil", servings: 4, favorite: false, tags: ["dulce","fin de semana"],
+    ingredients: [{name:"Harina",qty:1.5,unit:"tazas"},{name:"Leche",qty:1.5,unit:"tazas"},{name:"Huevos",qty:2,unit:"unidades"},{name:"Manteca",qty:2,unit:"cdas"},{name:"Azúcar",qty:2,unit:"cdas"},{name:"Polvo de hornear",qty:1,unit:"cdita"},{name:"Sal",qty:1,unit:"pizca"},{name:"Dulce de leche o miel",qty:1,unit:"al gusto"}],
+    steps:["Mezclar los ingredientes secos.","Batir huevos con leche y manteca derretida.","Unir las mezclas sin sobrebatir.","Cocinar en sartén antiadherente con poca manteca, de ambos lados.","Servir con dulce de leche o miel."] },
+  { id: 9, name: "Pasta con salsa boloñesa", category: "almuerzo", emoji: "🍝", source: "Clásico", time: 50, difficulty: "fácil", servings: 4, favorite: true, tags: ["pasta","clásico"],
+    ingredients: [{name:"Spaghetti",qty:400,unit:"g"},{name:"Carne picada",qty:400,unit:"g"},{name:"Tomates perita",qty:6,unit:"unidades"},{name:"Cebolla",qty:1,unit:"unidad"},{name:"Zanahoria",qty:1,unit:"unidad"},{name:"Apio",qty:1,unit:"tallo"},{name:"Ajo",qty:3,unit:"dientes"},{name:"Vino tinto",qty:100,unit:"ml"},{name:"Laurel",qty:1,unit:"hoja"},{name:"Queso parmesano",qty:80,unit:"g"},{name:"Aceite de oliva",qty:2,unit:"cdas"}],
+    steps:["Rehogar cebolla, zanahoria, apio y ajo picados.","Agregar la carne picada y dorar bien.","Incorporar el vino y dejar evaporar.","Agregar los tomates picados y el laurel. Cocinar 30 minutos a fuego bajo.","Cocinar la pasta al dente, escurrir.","Mezclar con la salsa y servir con queso parmesano."] },
+  { id: 10, name: "Sándwiches de miga para colación", category: "colacion", emoji: "🥪", source: "Práctico", time: 15, difficulty: "fácil", servings: 4, favorite: false, tags: ["rápido","escolar"],
+    ingredients: [{name:"Pan de miga",qty:12,unit:"rebanadas"},{name:"Jamón cocido",qty:200,unit:"g"},{name:"Queso en feta",qty:150,unit:"g"},{name:"Lechuga",qty:4,unit:"hojas"},{name:"Tomate",qty:2,unit:"unidades"},{name:"Mayonesa",qty:3,unit:"cdas"}],
+    steps:["Untar el pan con mayonesa.","Armar las capas con jamón, queso, lechuga y tomate.","Cerrar y cortar en triángulos.","Envolver para llevar a la escuela."] },
+  { id: 11, name: "Merienda de frutas con yogur", category: "merienda", emoji: "🍓", source: "Saludable", time: 5, difficulty: "fácil", servings: 4, favorite: false, tags: ["rápido","saludable","frutas"],
+    ingredients: [{name:"Yogur natural",qty:4,unit:"potes"},{name:"Frutillas",qty:200,unit:"g"},{name:"Banana",qty:2,unit:"unidades"},{name:"Granola",qty:1,unit:"taza"},{name:"Miel",qty:2,unit:"cdas"}],
+    steps:["Cortar las frutas en trozos.","Poner yogur en vasos o bols.","Agregar las frutas y la granola.","Rociar con miel y servir inmediatamente."] },
+  { id: 12, name: "Arroz primavera con huevo", category: "almuerzo", emoji: "🍚", source: "Paulina Cocina", time: 25, difficulty: "fácil", servings: 4, favorite: false, tags: ["arroz","rápido","vegetariano"],
+    ingredients: [{name:"Arroz largo fino",qty:2,unit:"tazas"},{name:"Chauchas",qty:200,unit:"g"},{name:"Zanahoria",qty:2,unit:"unidades"},{name:"Arvejas",qty:1,unit:"taza"},{name:"Huevos",qty:4,unit:"unidades"},{name:"Aceite",qty:2,unit:"cdas"},{name:"Sal",qty:1,unit:"c/n"}],
+    steps:["Cocinar el arroz según el paquete.","Blanquear las chauchas y zanahoria cortada.","Saltear todas las verduras en aceite.","Agregar el arroz cocido y mezclar.","Hacer huevos fritos o revueltos por separado y servir arriba."] },
+];
+
+const DAYS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+const DAY_FULL = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+const MEALS = ["desayuno","colacion","almuerzo","merienda","cena"];
+const MEAL_LABELS = { desayuno:"Desayuno", colacion:"Colación", almuerzo:"Almuerzo", merienda:"Merienda", cena:"Cena" };
+const MEAL_COLORS = { desayuno:"#F59E0B", colacion:"#8B5CF6", almuerzo:"#10B981", merienda:"#F97316", cena:"#3B82F6" };
+const CAT_COLORS = { desayuno:"badge-amber", colacion:"badge-purple", almuerzo:"badge-green", merienda:"badge-amber", cena:"badge-blue" };
+
+const buildEmptyWeek = () => {
+  const week = {};
+  DAYS.forEach(d => { week[d] = {}; MEALS.forEach(m => { week[d][m] = null; }); });
+  return week;
+};
+
+const INITIAL_WEEK = buildEmptyWeek();
+// Pre-fill some meals
+const PREFILL = {
+  Lun: { desayuno:6, almuerzo:4, cena:1 },
+  Mar: { desayuno:8, colacion:10, almuerzo:9, merienda:11, cena:3 },
+  Mié: { desayuno:6, almuerzo:12, cena:7 },
+  Jue: { desayuno:8, colacion:10, almuerzo:2, merienda:11, cena:1 },
+  Vie: { desayuno:6, almuerzo:9, cena:5 },
+  Sáb: { desayuno:8, almuerzo:4, cena:5 },
+  Dom: { desayuno:8, almuerzo:9, cena:7 },
+};
+Object.entries(PREFILL).forEach(([d,meals]) => {
+  Object.entries(meals).forEach(([m,id]) => { INITIAL_WEEK[d][m] = INITIAL_RECIPES.find(r => r.id === id) || null; });
+});
+
+const INITIAL_INVENTORY = [
+  {id:1,name:"Huevos",qty:"12",unit:"unidades",emoji:"🥚",cat:"Lácteos"},
+  {id:2,name:"Leche",qty:"2",unit:"litros",emoji:"🥛",cat:"Lácteos"},
+  {id:3,name:"Queso rallado",qty:"200",unit:"g",emoji:"🧀",cat:"Lácteos"},
+  {id:4,name:"Cebolla",qty:"5",unit:"unidades",emoji:"🧅",cat:"Verdulería"},
+  {id:5,name:"Ajo",qty:"1",unit:"cabeza",emoji:"🧄",cat:"Verdulería"},
+  {id:6,name:"Tomate",qty:"4",unit:"unidades",emoji:"🍅",cat:"Verdulería"},
+  {id:7,name:"Zanahoria",qty:"4",unit:"unidades",emoji:"🥕",cat:"Verdulería"},
+  {id:8,name:"Aceite de oliva",qty:"500",unit:"ml",emoji:"🫙",cat:"Almacén"},
+  {id:9,name:"Arroz",qty:"1",unit:"kg",emoji:"🍚",cat:"Almacén"},
+  {id:10,name:"Harina",qty:"1",unit:"kg",emoji:"🌾",cat:"Almacén"},
+  {id:11,name:"Pasta spaghetti",qty:"400",unit:"g",emoji:"🍝",cat:"Almacén"},
+  {id:12,name:"Caldo de pollo",qty:"1.5",unit:"litros",emoji:"🍲",cat:"Almacén"},
+  {id:13,name:"Pollo pechuga",qty:"600",unit:"g",emoji:"🍗",cat:"Carnicería"},
+  {id:14,name:"Carne picada",qty:"500",unit:"g",emoji:"🥩",cat:"Carnicería"},
+  {id:15,name:"Yogur natural",qty:"4",unit:"potes",emoji:"🥛",cat:"Lácteos"},
+  {id:16,name:"Banana",qty:"4",unit:"unidades",emoji:"🍌",cat:"Verdulería"},
+];
+
+const SHOPPING_CATS = { "Verdulería":"🥦", "Carnicería":"🥩", "Almacén":"🛒", "Lácteos":"🥛", "Panadería":"🍞", "Limpieza":"🧴" };
+
+// ─── HELPERS ────────────────────────────────────────────────────────────
+function generateShoppingList(week, inventory) {
+  const totals = {};
+  Object.values(week).forEach(day => {
+    Object.values(day).forEach(recipe => {
+      if (!recipe) return;
+      recipe.ingredients.forEach(ing => {
+        const key = ing.name.toLowerCase();
+        if (!totals[key]) totals[key] = { name: ing.name, qty: 0, unit: ing.unit, cat: guessCat(ing.name) };
+        const n = parseFloat(ing.qty);
+        if (!isNaN(n)) totals[key].qty += n;
+      });
+    });
+  });
+  const invMap = {};
+  inventory.forEach(i => { invMap[i.name.toLowerCase()] = parseFloat(i.qty) || 0; });
+  const items = Object.values(totals).map(item => {
+    const have = invMap[item.name.toLowerCase()] || 0;
+    const need = Math.max(0, item.qty - have);
+    return { ...item, need, have };
+  }).filter(i => i.need > 0);
+  const bycat = {};
+  items.forEach(i => {
+    if (!bycat[i.cat]) bycat[i.cat] = [];
+    bycat[i.cat].push(i);
+  });
+  return bycat;
+}
+
+function guessCat(name) {
+  const n = name.toLowerCase();
+  if (/(tomate|cebolla|ajo|zanahoria|espinaca|brócoli|zucchini|morrón|papa|lechuga|apio|verdeo|chaucha|arveja|banana|manzana|limón|frutilla|fruta)/.test(n)) return "Verdulería";
+  if (/(carne|pollo|milanesa|chorizo|cerdo|res|ternera|jamón)/.test(n)) return "Carnicería";
+  if (/(leche|yogur|queso|ricota|crema|manteca|huevo)/.test(n)) return "Lácteos";
+  if (/(pan|harina|avena|granola|galleta)/.test(n)) return "Panadería";
+  return "Almacén";
+}
+
+function getDiffColor(d) {
+  if (d === "fácil") return "badge-green";
+  if (d === "media") return "badge-amber";
+  return "badge-rose";
+}
+
+// ─── CLAUDE AI HELPER ────────────────────────────────────────────────────
+// ── Local recipe text parser — zero API, zero config ──────────────────────
+function parseRecipeText(raw) {
+  const lines = raw.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const text = raw;
+
+  // ── Name: first non-empty line, or line after "nombre:" / "receta:" ──
+  let name = '';
+  const nameMatch = text.match(/(?:nombre|receta|título)[:\s]+([^\n]+)/i);
+  if (nameMatch) name = nameMatch[1].trim();
+  else name = lines[0] || 'Receta importada';
+
+  // ── Category guess ───────────────────────────────────────────────────
+  const lower = text.toLowerCase();
+  let category = 'cena';
+  if (/desayuno|tostada|avena|granola|jugo|mate|café|panqueque|medialunas/.test(lower)) category = 'desayuno';
+  else if (/colación|colacion|vianda|recreo|escuela|merienda escolar/.test(lower)) category = 'colacion';
+  else if (/almuerzo|mediodía|mediodia/.test(lower)) category = 'almuerzo';
+  else if (/merienda|té |te |infusión|galletitas|bizcochuelo|torta|budín/.test(lower)) category = 'merienda';
+
+  // ── Emoji guess ──────────────────────────────────────────────────────
+  const emojiMap = [
+    [/pollo|chicken/,'🍗'],[/pasta|fideos|spaghetti|tallarines/,'🍝'],
+    [/arroz/,'🍚'],[/sopa|caldo/,'🍜'],[/ensalada/,'🥗'],
+    [/tarta|quiche/,'🥧'],[/pizza/,'🍕'],[/hamburguesa/,'🍔'],
+    [/milanesa|milanga/,'🍖'],[/pescado|atún|salmon/,'🐟'],
+    [/huevo|tortilla/,'🍳'],[/panqueque|crepe/,'🥞'],
+    [/empanada/,'🥟'],[/sandwich|sándwich/,'🥪'],[/avena/,'🥣'],
+    [/fruta|frutilla|banana|manzana/,'🍓'],[/yogur/,'🥛'],
+    [/torta|bizcochuelo|cake/,'🎂'],[/galleta|cookie/,'🍪'],
+    [/carne|bife|churras/,'🥩'],[/cerdo|lechon/,'🐷'],
+    [/verdura|veggie|vegetal/,'🥦'],[/legumbre|lenteja|garbanzo|poroto/,'🫘'],
+  ];
+  let emoji = '🍽️';
+  for (const [re, em] of emojiMap) { if (re.test(lower)) { emoji = em; break; } }
+
+  // ── Time ────────────────────────────────────────────────────────────
+  let time = 30;
+  const timeMatch = text.match(/(\d+)\s*(?:minutos?|mins?|min\.)/i);
+  if (timeMatch) time = parseInt(timeMatch[1]);
+  else {
+    const hrMatch = text.match(/(\d+)\s*(?:horas?|hs?\.?)/i);
+    if (hrMatch) time = parseInt(hrMatch[1]) * 60;
+  }
+
+  // ── Difficulty ──────────────────────────────────────────────────────
+  let difficulty = 'fácil';
+  if (/difícil|elaborad|complicad|avanzad|complej/i.test(text)) difficulty = 'elaborada';
+  else if (/medi[ao]|intermedi/i.test(text)) difficulty = 'media';
+
+  // ── Source ──────────────────────────────────────────────────────────
+  let source = 'Importada';
+  const srcMatch = text.match(/(?:fuente|source|de:|por:|autor|blog|canal)[:\s]+([^\n]{3,40})/i);
+  if (srcMatch) source = srcMatch[1].trim();
+  else if (/paulina/i.test(text)) source = 'Paulina Cocina';
+  else if (/instagram/i.test(text)) source = 'Instagram';
+  else if (/youtube/i.test(text)) source = 'YouTube';
+
+  // ── Tags ────────────────────────────────────────────────────────────
+  const tags = [];
+  if (/vegetarian[ao]|veggie|sin carne/i.test(text)) tags.push('vegetariano');
+  if (/sin gluten|gluten.free|celiac/i.test(text)) tags.push('sin gluten');
+  if (/rápido|rapido|fácil|facil|quick/i.test(text)) tags.push('rápido');
+  if (/horno/i.test(text)) tags.push('horno');
+  if (/niño|niños|kids|infantil/i.test(text)) tags.push('niños');
+  if (time <= 20) tags.push('rápido');
+
+  // ── Ingredients ─────────────────────────────────────────────────────
+  // Find ingredient section: look for "ingredientes", "necesitás", "materiales"
+  const ingSection = text.match(/ingredientes?[:\s]*([\s\S]*?)(?=preparación|modo de|pasos|procedimiento|instrucciones|elaboración|$)/i);
+  const ingRaw = ingSection ? ingSection[1] : text;
+  
+  // Unit patterns
+  const unitRe = /\b(kg|g|gr|gramos?|mg|l|lt|litros?|ml|tazas?|cdas?\.?|cucharadas?|cditas?\.?|cucharitas?|unidades?|un\.|u\.|potes?|atados?|manojos?|cabezas?|dientes?|rebanadas?|rodajas?|filetes?|piezas?|porciones?|latas?|sobres?|paquetes?|puñados?)\b/i;
+  const ingLines = ingRaw.split(/\n/).map(l => l.trim()).filter(l =>
+    l.length > 2 && l.length < 120 &&
+    !(/^(?:ingredientes?|preparación|pasos?|modo|instrucciones?|procedimiento|elaboración|para servir|para decorar|para la masa|para el relleno)[:.]?$/i.test(l))
+  );
+
+  const ingredients = [];
+  for (const line of ingLines) {
+    // Skip obvious step lines
+    if (/^\d+[.)\-]\s/.test(line) && line.length > 60) continue;
+    if (/precalentar|mezclar|cocinar|hervir|hornear|agregar|poner|llevar|batir|cortar|picar|saltear/i.test(line) && !/\d/.test(line)) continue;
+
+    // Try to extract qty + unit + name
+    const m = line.match(/^[-•*·]?\s*([\d.,\/½¼¾]+)?\s*([\w.]+)?\s+(?:de\s+)?(.+)$/);
+    // Pattern: "2 tazas de harina", "200g queso", "3 huevos", "1/2 cebolla"
+    const fullMatch = line.match(/^[-•*·]?\s*([\d.,\/ ½¼¾]+)?\s*(` + '`' + `${unitRe.source}` + '`' + `)?\s*(?:de\s+)?([a-záéíóúüñA-ZÁÉÍÓÚÜÑ][\w\s,()]+)/);
+    
+    let qty = '', unit = '', name = '';
+    if (fullMatch) {
+      qty = (fullMatch[1] || '').trim().replace(',','.');
+      unit = (fullMatch[2] || '').trim();
+      name = (fullMatch[3] || '').trim();
+    } else {
+      // Simple: just take the whole line as name
+      name = line.replace(/^[-•*·]\s*/, '').trim();
+    }
+    if (name && name.length > 1 && name.length < 80) {
+      ingredients.push({ name, qty: qty || '1', unit: unit || 'unidad' });
+    }
+  }
+
+  // ── Steps ────────────────────────────────────────────────────────────
+  const stepSection = text.match(/(?:preparación|modo de preparar|pasos?|procedimiento|instrucciones?|elaboración)[:\s]*([\s\S]+)/i);
+  const stepRaw = stepSection ? stepSection[1] : text;
+  
+  const steps = stepRaw
+    .split(/\n/)
+    .map(l => l.trim())
+    .filter(l => l.length > 10)
+    .map(l => l.replace(/^\d+[.)\-]\s*/, '').replace(/^[-•*·]\s*/, '').trim())
+    .filter(l => l.length > 10 && l.length < 500)
+    .filter(l => !/^(?:ingredientes?|preparación|pasos?)[:.]?$/i.test(l))
+    .slice(0, 20);
+
+  return {
+    name: name.slice(0, 80),
+    category,
+    emoji,
+    time,
+    difficulty,
+    source,
+    tags: tags.join(', '),
+    ingredients: ingredients.length ? ingredients : [{ name: '', qty: '1', unit: 'unidad' }],
+    steps: steps.length ? steps : [''],
+  };
+}
+
+
+function RecipeModal({ recipe, onClose, inventory = [], onMarkAvailable }) {
+  const [scale, setScale] = useState(1);
+  const [available, setAvailable] = useState({});
+  const scaleOptions = [0.5, 1, 1.5, 2, 3];
+  const scaledServings = Math.round(recipe.servings * scale);
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <div>
+            <div className="flex items-center gap-8 mb-4">
+              <span style={{fontSize:28}}>{recipe.emoji}</span>
+              <h3>{recipe.name}</h3>
+            </div>
+            <div className="flex gap-6 wrap">
+              <span className={`badge ${CAT_COLORS[recipe.category] || 'badge-gray'}`}>{MEAL_LABELS[recipe.category]}</span>
+              <span className={`badge ${getDiffColor(recipe.difficulty)}`}>{recipe.difficulty}</span>
+              <span className="badge badge-gray">⏱ {recipe.time} min</span>
+              <span className="badge badge-gray">📖 {recipe.source}</span>
+            </div>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="flex items-center gap-12 mb-16">
+            <span className="label" style={{margin:0}}>Porciones:</span>
+            <div className="tabs">
+              {scaleOptions.map(s => (
+                <button key={s} className={`tab ${scale === s ? 'active' : ''}`} onClick={() => setScale(s)}>
+                  {Math.round(recipe.servings * s)} pers.
+                </button>
+              ))}
+            </div>
+          </div>
+          <h4 className="font-semibold mb-8" style={{fontSize:14}}>🥕 Ingredientes</h4>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:20}}>
+            {recipe.ingredients.map((ing, i) => {
+              const scaledQty = typeof ing.qty === 'number' ? (ing.qty * scale).toFixed(ing.qty % 1 === 0 ? 0 : 1) : ing.qty;
+              const isAvail = available[i];
+              return (
+                <div key={i} onClick={() => setAvailable(a => ({...a,[i]:!a[i]}))}
+                  style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:8,background:isAvail?'var(--accent-bg)':'var(--bg2)',cursor:'pointer',border:`1px solid ${isAvail?'#B8DFC8':'var(--border)'}`,fontSize:13}}>
+                  <span style={{color:isAvail?'var(--accent2)':'var(--text3)',fontSize:11}}>{isAvail?'✓':'○'}</span>
+                  <span style={{flex:1,color:isAvail?'var(--accent2)':'var(--text)',textDecoration:isAvail?'line-through':'none'}}>{ing.name}</span>
+                  <span style={{color:'var(--text3)',fontWeight:600,fontSize:12}}>{scaledQty} {ing.unit}</span>
+                </div>
+              );
+            })}
+          </div>
+          <h4 className="font-semibold mb-8" style={{fontSize:14}}>📋 Preparación</h4>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {recipe.steps.map((step, i) => (
+              <div key={i} style={{display:'flex',gap:10,padding:'10px 12px',background:'var(--bg2)',borderRadius:8}}>
+                <span style={{minWidth:22,height:22,background:'var(--accent)',color:'white',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>{i+1}</span>
+                <span style={{fontSize:13,lineHeight:1.5}}>{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecipePickerModal({ onSelect, onClose, recipes, currentMeal }) {
+  const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState(currentMeal || "all");
+  const filtered = recipes.filter(r => {
+    const matchSearch = r.name.toLowerCase().includes(search.toLowerCase());
+    const matchCat = catFilter === "all" || r.category === catFilter;
+    return matchSearch && matchCat;
+  });
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <h3>Seleccionar receta</h3>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <input className="input mb-12" placeholder="Buscar receta..." value={search} onChange={e => setSearch(e.target.value)} autoFocus />
+          <div className="tabs mb-12" style={{flexWrap:'wrap'}}>
+            {["all",...MEALS].map(c => (
+              <button key={c} className={`tab ${catFilter === c ? 'active' : ''}`} onClick={() => setCatFilter(c)}>
+                {c === "all" ? "Todas" : MEAL_LABELS[c]}
+              </button>
+            ))}
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {filtered.map(r => (
+              <div key={r.id} onClick={() => { onSelect(r); onClose(); }}
+                style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderRadius:10,border:'1px solid var(--border)',cursor:'pointer',background:'var(--card)',transition:'all 0.1s'}}
+                onMouseEnter={e => e.currentTarget.style.background='var(--bg2)'}
+                onMouseLeave={e => e.currentTarget.style.background='var(--card)'}>
+                <span style={{fontSize:24}}>{r.emoji}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:600,fontSize:14}}>{r.name}</div>
+                  <div style={{fontSize:12,color:'var(--text3)',marginTop:2}}>⏱ {r.time} min · {r.source}</div>
+                </div>
+                <span className={`badge ${CAT_COLORS[r.category] || 'badge-gray'}`}>{MEAL_LABELS[r.category]}</span>
+              </div>
+            ))}
+            {filtered.length === 0 && <div className="empty-state" style={{padding:24}}><p>No se encontraron recetas</p></div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddRecipeModal({ onClose, onSave }) {
+  const EMPTY_FORM = { name:'', category:'cena', emoji:'🍽️', time:30, difficulty:'fácil', source:'Propia', tags:'', ingredients:[{name:'',qty:'1',unit:'unidad'}], steps:[''] };
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [tab, setTab] = useState('pegar');   // 'pegar' | 'manual'
+  const [rawText, setRawText] = useState('');
+  const [parseState, setParseState] = useState('idle'); // idle | done | error
+  const [parseMsg, setParseMsg] = useState('');
+
+  const upd = (k, v) => setForm(f => ({...f, [k]:v}));
+  const addIng = () => setForm(f => ({...f, ingredients:[...f.ingredients,{name:'',qty:'1',unit:'unidad'}]}));
+  const updIng = (i, k, v) => setForm(f => { const a=[...f.ingredients]; a[i]={...a[i],[k]:v}; return {...f,ingredients:a}; });
+  const removeIng = i => setForm(f => ({...f, ingredients:f.ingredients.filter((_,idx)=>idx!==i)}));
+  const addStep = () => setForm(f => ({...f, steps:[...f.steps,'']}));
+  const updStep = (i, v) => setForm(f => { const a=[...f.steps]; a[i]=v; return {...f,steps:a}; });
+  const removeStep = i => setForm(f => ({...f, steps:f.steps.filter((_,idx)=>idx!==i)}));
+
+  const handleSave = () => {
+    if (!form.name.trim()) return alert('Ingresá el nombre de la receta');
+    const recipe = { ...form, id: Date.now(), servings: 4, favorite: false,
+      tags: Array.isArray(form.tags) ? form.tags : form.tags.split(',').map(t=>t.trim()).filter(Boolean),
+      ingredients: form.ingredients.filter(i => i.name && String(i.name).trim()),
+      steps: form.steps.filter(s => s && String(s).trim()) };
+    onSave(recipe);
+    onClose();
+  };
+
+  const handleParse = () => {
+    if (!rawText.trim()) { setParseMsg('Pegá el texto de la receta primero.'); setParseState('error'); return; }
+    try {
+      const parsed = parseRecipeText(rawText);
+      setForm(parsed);
+      setParseState('done');
+      setParseMsg('¡Receta cargada! Revisá y corregí lo que necesites antes de guardar.');
+      setTab('manual');
+    } catch(e) {
+      setParseState('error');
+      setParseMsg('No se pudo leer el texto. Intentá con la pestaña Manual.');
+    }
+  };
+
+  // Example template to show user the expected format
+  const TEMPLATE = `Milanesas al horno con papas
+Categoría: cena
+Tiempo: 45 minutos
+Dificultad: fácil
+Fuente: Paulina Cocina
+
+Ingredientes:
+- 8 milanesas de ternera
+- 4 papas grandes
+- 2 huevos
+- 1 taza de pan rallado
+- 3 dientes de ajo
+- 3 cdas de aceite de oliva
+- Sal y pimienta a gusto
+
+Preparación:
+1. Precalentar el horno a 200°C.
+2. Batir los huevos con sal, pimienta y ajo picado.
+3. Pasar las milanesas por huevo y luego por pan rallado.
+4. Cortar las papas en gajos y condimentar con aceite y sal.
+5. Hornear todo 35-40 minutos dando vuelta a mitad de cocción.`;
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{maxWidth:720}}>
+        <div className="modal-header">
+          <h3>Agregar Receta</h3>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="modal-body" style={{paddingTop:12}}>
+          <div className="tabs mb-16">
+            <button className={`tab ${tab==='pegar'?'active':''}`} onClick={()=>setTab('pegar')}>
+              📋 Pegar texto
+            </button>
+            <button className={`tab ${tab==='manual'?'active':''}`} onClick={()=>setTab('manual')}>
+              ✏️ Manual
+            </button>
+          </div>
+
+          {/* ── PEGAR TAB ── */}
+          {tab === 'pegar' && (
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+
+              {/* How-to banner */}
+              <div style={{background:'var(--blue-bg)',border:'1px solid #B8D4F0',borderRadius:12,padding:'12px 16px'}}>
+                <div style={{fontWeight:700,color:'var(--blue)',fontSize:13,marginBottom:6}}>¿Cómo usar esta función?</div>
+                <div style={{fontSize:13,color:'var(--text2)',lineHeight:1.7}}>
+                  <strong>Desde cualquier web o app:</strong> copiá el texto de la receta (Ctrl+A → Ctrl+C) y pegalo abajo (Ctrl+V).<br/>
+                  <strong>Desde una foto:</strong> usá Google Lens, la cámara de Google o el texto en vivo de tu celular para convertir la foto a texto, luego copiá y pegá.<br/>
+                  <strong>Desde Instagram o YouTube:</strong> copiá la descripción del post o los comentarios con la receta.
+                </div>
+              </div>
+
+              {/* Text area */}
+              <div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                  <label className="label" style={{margin:0}}>Pegá el texto de la receta</label>
+                  <button className="btn btn-ghost btn-sm" style={{fontSize:11,color:'var(--text3)'}}
+                    onClick={()=>setRawText(TEMPLATE)}>
+                    Ver ejemplo de formato
+                  </button>
+                </div>
+                <textarea
+                  className="textarea"
+                  style={{minHeight:220,fontSize:13,lineHeight:1.6,fontFamily:'monospace'}}
+                  placeholder={"Pegá acá el texto de la receta...\n\nEjemplo:\nMilanesas al horno\nIngredientes:\n- 8 milanesas\n- 4 papas\nPreparación:\n1. Precalentar el horno...\n2. ..."}
+                  value={rawText}
+                  onChange={e=>{setRawText(e.target.value); setParseState('idle');}}
+                />
+              </div>
+
+              {/* Parse result message */}
+              {parseState === 'error' && (
+                <div style={{background:'var(--rose-bg)',border:'1px solid #F0C0C8',borderRadius:8,padding:'10px 14px',fontSize:13,color:'var(--rose)'}}>{parseMsg}</div>
+              )}
+
+              {/* Accepted formats info */}
+              <div style={{background:'var(--bg2)',borderRadius:10,padding:'10px 14px',fontSize:12,color:'var(--text3)',lineHeight:1.7}}>
+                <strong style={{color:'var(--text2)'}}>La app detecta automáticamente:</strong> nombre, ingredientes con cantidades, pasos, tiempo, categoría y dificultad.
+                No necesita un formato exacto — funciona con texto libre copiado de cualquier fuente.
+              </div>
+
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>setTab('manual')}>✏️ Cargar manualmente</button>
+                <button className="btn btn-primary" onClick={handleParse} disabled={!rawText.trim()}>
+                  ✨ Procesar texto →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── MANUAL TAB ── */}
+          {tab === 'manual' && (
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              {parseState==='done' && (
+                <div style={{background:'var(--accent-bg)',border:'1px solid #B8DFC8',borderRadius:10,padding:'10px 14px',fontSize:13,color:'var(--accent2)',fontWeight:600}}>
+                  ✅ {parseMsg}
+                </div>
+              )}
+              <div className="grid-2">
+                <div>
+                  <label className="label">Nombre *</label>
+                  <input className="input" value={form.name} onChange={e=>upd('name',e.target.value)} placeholder="Ej: Milanesas napolitanas" autoFocus />
+                </div>
+                <div>
+                  <label className="label">Emoji</label>
+                  <input className="input" value={form.emoji} onChange={e=>upd('emoji',e.target.value)} style={{fontSize:20,textAlign:'center'}} />
+                </div>
+              </div>
+              <div className="grid-3">
+                <div>
+                  <label className="label">Categoría</label>
+                  <select className="select" value={form.category} onChange={e=>upd('category',e.target.value)}>
+                    {MEALS.map(m => <option key={m} value={m}>{MEAL_LABELS[m]}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Tiempo (min)</label>
+                  <input className="input" type="number" value={form.time} onChange={e=>upd('time',parseInt(e.target.value)||0)} />
+                </div>
+                <div>
+                  <label className="label">Dificultad</label>
+                  <select className="select" value={form.difficulty} onChange={e=>upd('difficulty',e.target.value)}>
+                    <option value="fácil">Fácil</option>
+                    <option value="media">Media</option>
+                    <option value="elaborada">Elaborada</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div>
+                  <label className="label">Fuente / Origen</label>
+                  <input className="input" value={form.source} onChange={e=>upd('source',e.target.value)} placeholder="Paulina Cocina, Instagram..." />
+                </div>
+                <div>
+                  <label className="label">Tags (separados por coma)</label>
+                  <input className="input" value={Array.isArray(form.tags)?form.tags.join(', '):form.tags} onChange={e=>upd('tags',e.target.value)} placeholder="rápido, horno, vegetariano" />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-8">
+                  <label className="label" style={{margin:0}}>Ingredientes <span style={{fontWeight:400,color:'var(--text3)'}}>(para 4 personas)</span></label>
+                  <button className="btn btn-secondary btn-sm" onClick={addIng}>+ Agregar</button>
+                </div>
+                {form.ingredients.map((ing, i) => (
+                  <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 80px 90px 32px',gap:6,marginBottom:6}}>
+                    <input className="input" placeholder="Ingrediente" value={ing.name||''} onChange={e=>updIng(i,'name',e.target.value)} />
+                    <input className="input" placeholder="Cant." value={ing.qty||''} onChange={e=>updIng(i,'qty',e.target.value)} />
+                    <input className="input" placeholder="Unidad" value={ing.unit||''} onChange={e=>updIng(i,'unit',e.target.value)} />
+                    <button className="btn btn-ghost btn-sm" onClick={()=>removeIng(i)} style={{padding:'5px 8px',color:'var(--rose)'}}>✕</button>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-8">
+                  <label className="label" style={{margin:0}}>Pasos de preparación</label>
+                  <button className="btn btn-secondary btn-sm" onClick={addStep}>+ Agregar</button>
+                </div>
+                {form.steps.map((step, i) => (
+                  <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 32px',gap:6,marginBottom:6}}>
+                    <textarea className="textarea" style={{minHeight:52}} placeholder={`Paso ${i+1}...`} value={step||''} onChange={e=>updStep(i,e.target.value)} />
+                    <button className="btn btn-ghost btn-sm" onClick={()=>removeStep(i)} style={{padding:'5px 8px',color:'var(--rose)',alignSelf:'start',marginTop:2}}>✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          {tab==='pegar' ? (
+            <button className="btn btn-primary" onClick={handleParse} disabled={!rawText.trim()}>✨ Procesar texto →</button>
+          ) : (
+            <button className="btn btn-primary" onClick={handleSave}>💾 Guardar Receta</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PAGES ────────────────────────────────────────────────────────────────
+// ─── PAGES ────────────────────────────────────────────────────────────────
+
+function DashboardPage({ week, recipes, inventory, setPage, setWeek }) {
+  const [picker, setPicker] = useState(null);
+
+  const totalMeals = Object.values(week).reduce((acc, day) => acc + Object.values(day).filter(Boolean).length, 0);
+  const maxMeals = 7 * 5;
+  const favCount = recipes.filter(r => r.favorite).length;
+  const invCount = inventory.length;
+
+  const autoGenWeek = () => {
+    const newWeek = buildEmptyWeek();
+    const shuffled = [...recipes].sort(() => Math.random() - 0.5);
+    let idx = 0;
+    DAYS.forEach(d => {
+      MEALS.forEach(m => {
+        const match = shuffled.find((r, i) => r.category === m && i >= idx);
+        if (match) newWeek[d][m] = match;
+        else {
+          const any = shuffled.find(r => r.category === m);
+          if (any) newWeek[d][m] = any;
+        }
+      });
+    });
+    setWeek(newWeek);
+  };
+
+  const today = DAYS[new Date().getDay() === 0 ? 6 : new Date().getDay() - 1];
+
+  return (
+    <>
+      {picker && <RecipePickerModal recipes={recipes} currentMeal={picker.meal}
+        onSelect={r => { const w = {...week}; if(!w[picker.day]) w[picker.day]={}; w[picker.day][picker.meal]=r; setWeek(w); }}
+        onClose={() => setPicker(null)} />}
+      <div className="page-header">
+        <div>
+          <h2>Panel semanal</h2>
+          <p>Semana del {new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</p>
+        </div>
+        <div className="flex gap-8">
+          <button className="btn btn-secondary" onClick={autoGenWeek}>✨ Autogenerar semana</button>
+          <button className="btn btn-primary" onClick={() => setPage('plan')}>Ver plan completo</button>
+        </div>
+      </div>
+      <div className="page-body">
+        <div className="grid-4 mb-16" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
+          {[
+            {num:totalMeals, label:`de ${maxMeals} comidas planificadas`, icon:'📅'},
+            {num:recipes.length, label:'recetas en tu biblioteca', icon:'📚'},
+            {num:favCount, label:'recetas favoritas', icon:'❤️'},
+            {num:invCount, label:'items en inventario', icon:'🧊'},
+          ].map((s,i) => (
+            <div key={i} className="stat-card">
+              <div style={{fontSize:22,marginBottom:4}}>{s.icon}</div>
+              <div className="stat-num">{s.num}</div>
+              <div className="stat-label">{s.label}</div>
+              {i===0 && <div className="progress-bar mt-8"><div className="progress-fill" style={{width:`${Math.round(totalMeals/maxMeals*100)}%`}}></div></div>}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid-2">
+          <div>
+            <h3 className="font-semibold mb-12" style={{fontSize:15}}>📅 Hoy — {DAY_FULL[DAYS.indexOf(today)]}</h3>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {MEALS.map(meal => {
+                const recipe = week[today]?.[meal];
+                return (
+                  <div key={meal} className="card card-sm flex items-center gap-12" style={{cursor:'pointer'}}
+                    onClick={() => setPicker({day:today, meal})}>
+                    <div style={{width:8,height:8,borderRadius:'50%',background:MEAL_COLORS[meal],flexShrink:0}}></div>
+                    <span style={{fontSize:12,fontWeight:600,color:'var(--text3)',minWidth:70}}>{MEAL_LABELS[meal]}</span>
+                    {recipe ? (
+                      <div className="flex items-center gap-8 flex-1">
+                        <span>{recipe.emoji}</span>
+                        <span style={{fontSize:13,fontWeight:500}}>{recipe.name}</span>
+                      </div>
+                    ) : (
+                      <span style={{fontSize:13,color:'var(--text3)',fontStyle:'italic'}}>Sin planificar · click para agregar</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="font-semibold mb-12" style={{fontSize:15}}>📋 Agregar receta desde texto</h3>
+            <div className="card" style={{background:'var(--accent-bg)',border:'1px solid #B8DFC8',cursor:'pointer'}} onClick={()=>setPage('recipes')}>
+              <div style={{display:'flex',alignItems:'center',gap:14,padding:'4px 0'}}>
+                <span style={{fontSize:36}}>📋</span>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,color:'var(--accent2)',marginBottom:4}}>Importar receta con texto</div>
+                  <div style={{fontSize:13,color:'var(--text2)',lineHeight:1.5}}>
+                    Copiá el texto de cualquier receta — de una web, Instagram, un libro — pegalo y la app lo convierte automáticamente. Sin fotos, sin API, sin configuración.
+                  </div>
+                  <div style={{marginTop:8,fontSize:12,color:'var(--accent)',fontWeight:600}}>Ir a Recetas → 📋 Importar / + Nueva →</div>
+                </div>
+              </div>
+            </div>
+
+            <h3 className="font-semibold mb-12 mt-16" style={{fontSize:15}}>❤️ Favoritas</h3>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {recipes.filter(r=>r.favorite).slice(0,4).map(r => (
+                <div key={r.id} className="card card-sm flex items-center gap-10" style={{cursor:'pointer'}}
+                  onClick={() => setPage('recipes')}>
+                  <span style={{fontSize:20}}>{r.emoji}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:600}}>{r.name}</div>
+                    <div style={{fontSize:11,color:'var(--text3)'}}>⏱ {r.time} min</div>
+                  </div>
+                  <span className={`badge ${CAT_COLORS[r.category]||'badge-gray'}`}>{MEAL_LABELS[r.category]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PlanPage({ week, setWeek, recipes }) {
+  const [selectedRecipe, setSelectedRecipe] = useState(null);
+  const [picker, setPicker] = useState(null);
+
+  const clearMeal = (day, meal) => {
+    const w = {...week, [day]:{...week[day],[meal]:null}};
+    setWeek(w);
+  };
+
+  const autoGen = () => {
+    const newWeek = buildEmptyWeek();
+    DAYS.forEach(d => {
+      MEALS.forEach(m => {
+        const pool = recipes.filter(r => r.category === m);
+        newWeek[d][m] = pool.length ? pool[Math.floor(Math.random()*pool.length)] : null;
+      });
+    });
+    setWeek(newWeek);
+  };
+
+  return (
+    <>
+      {selectedRecipe && <RecipeModal recipe={selectedRecipe} onClose={() => setSelectedRecipe(null)} />}
+      {picker && <RecipePickerModal recipes={recipes} currentMeal={picker.meal}
+        onSelect={r => { const w = {...week}; w[picker.day][picker.meal] = r; setWeek(w); }}
+        onClose={() => setPicker(null)} />}
+
+      <div className="page-header">
+        <div>
+          <h2>Planificador semanal</h2>
+          <p>Click en cualquier celda para cambiar la receta</p>
+        </div>
+        <div className="flex gap-8">
+          <button className="btn btn-secondary btn-sm" onClick={() => setWeek(buildEmptyWeek())}>Limpiar todo</button>
+          <button className="btn btn-primary btn-sm" onClick={autoGen}>✨ Autogenerar</button>
+        </div>
+      </div>
+      <div className="page-body" style={{overflowX:'auto'}}>
+        <div className="week-grid" style={{minWidth:700}}>
+          <div className="week-col-header" style={{background:'var(--card)'}}>
+          </div>
+          {DAYS.map((d,i) => (
+            <div key={d} className="week-col-header" style={{background: d === DAYS[new Date().getDay()===0?6:new Date().getDay()-1] ? 'var(--accent-bg)' : undefined}}>
+              <div style={{fontWeight:700,color:'var(--text)',fontSize:13}}>{d}</div>
+              <div style={{fontSize:10,color:'var(--text3)',fontWeight:400}}>{DAY_FULL[i].slice(0,3)}</div>
+            </div>
+          ))}
+          {MEALS.map(meal => (
+            <React.Fragment key={meal}>
+              <div className="week-row-label" style={{color:MEAL_COLORS[meal]}}>
+                {MEAL_LABELS[meal]}
+              </div>
+              {DAYS.map(day => {
+                const recipe = week[day]?.[meal];
+                return (
+                  <div key={day} className="week-cell">
+                    {recipe ? (
+                      <div className="meal-chip" onClick={() => setSelectedRecipe(recipe)}>
+                        <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
+                          <span style={{fontSize:14}}>{recipe.emoji}</span>
+                          <span className="meal-name" style={{fontSize:11,flex:1,lineHeight:1.2}}>{recipe.name}</span>
+                        </div>
+                        <div className="meal-time">⏱ {recipe.time}m</div>
+                        <div style={{position:'absolute',top:3,right:3,opacity:0}} className="del-btn"
+                          onMouseEnter={e=>e.currentTarget.style.opacity='1'}
+                          onMouseLeave={e=>e.currentTarget.style.opacity='0'}>
+                        </div>
+                        <div style={{display:'flex',gap:3,marginTop:4}}>
+                          <button className="btn btn-ghost" style={{padding:'1px 4px',fontSize:9,color:'var(--accent)'}}
+                            onClick={e=>{e.stopPropagation();setPicker({day,meal})}}>✏️</button>
+                          <button className="btn btn-ghost" style={{padding:'1px 4px',fontSize:9,color:'var(--rose)'}}
+                            onClick={e=>{e.stopPropagation();clearMeal(day,meal)}}>✕</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="meal-chip-empty" onClick={() => setPicker({day, meal})}>
+                        <span style={{fontSize:16}}>+</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+        <div className="mt-16">
+          <div className="flex gap-12 wrap">
+            {MEALS.map(m => (
+              <div key={m} className="flex items-center gap-6" style={{fontSize:12,color:'var(--text2)'}}>
+                <div style={{width:10,height:10,borderRadius:'50%',background:MEAL_COLORS[m]}}></div>
+                {MEAL_LABELS[m]}
+              </div>
+            ))}
+            <span style={{fontSize:12,color:'var(--text3)',marginLeft:'auto'}}>Click en receta → ver detalle · ✏️ cambiar · ✕ quitar</span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function RecipesPage({ recipes, setRecipes }) {
+  const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState("all");
+  const [diffFilter, setDiffFilter] = useState("all");
+  const [showFav, setShowFav] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+
+
+  const filtered = recipes.filter(r => {
+    const ms = r.name.toLowerCase().includes(search.toLowerCase()) || r.tags?.some(t=>t.includes(search.toLowerCase()));
+    const mc = catFilter === "all" || r.category === catFilter;
+    const md = diffFilter === "all" || r.difficulty === diffFilter;
+    const mf = !showFav || r.favorite;
+    return ms && mc && md && mf;
+  });
+
+  const toggleFav = (id) => setRecipes(rs => rs.map(r => r.id === id ? {...r, favorite: !r.favorite} : r));
+  const deleteRecipe = (id) => { if(window.confirm("¿Eliminar esta receta?")) setRecipes(rs => rs.filter(r => r.id !== id)); };
+  const addRecipe = (r) => setRecipes(rs => [...rs, r]);
+
+  return (
+    <>
+      {selected && <RecipeModal recipe={selected} onClose={() => setSelected(null)} />}
+      {showAdd && <AddRecipeModal onClose={() => setShowAdd(false)} onSave={addRecipe} />}
+
+      <div className="page-header">
+        <div>
+          <h2>Mis Recetas</h2>
+          <p>{recipes.length} recetas en tu biblioteca</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>📋 Importar / + Nueva receta</button>
+      </div>
+      <div className="page-body">
+        <div className="flex gap-8 mb-16 wrap">
+          <input className="input" style={{maxWidth:280}} placeholder="🔍 Buscar receta..." value={search} onChange={e=>setSearch(e.target.value)} />
+          <div className="tabs">
+            {["all",...MEALS].map(c => (
+              <button key={c} className={`tab ${catFilter===c?'active':''}`} onClick={()=>setCatFilter(c)}>
+                {c==="all"?"Todas":MEAL_LABELS[c]}
+              </button>
+            ))}
+          </div>
+          <button className={`btn ${showFav?'btn-primary':'btn-secondary'} btn-sm`} onClick={()=>setShowFav(!showFav)}>
+            ❤️ Favoritas
+          </button>
+          <select className="select" style={{width:'auto',paddingRight:8}} value={diffFilter} onChange={e=>setDiffFilter(e.target.value)}>
+            <option value="all">Todas las dificultades</option>
+            <option value="fácil">Fácil</option>
+            <option value="media">Media</option>
+            <option value="elaborada">Elaborada</option>
+          </select>
+        </div>
+
+        <div className="recipe-grid">
+          {filtered.map(r => (
+            <div key={r.id} className="recipe-card">
+              <div className="recipe-card-img" style={{background:`linear-gradient(135deg, ${MEAL_COLORS[r.category]}22, ${MEAL_COLORS[r.category]}44)`}}>
+                <span>{r.emoji}</span>
+              </div>
+              <div className="recipe-card-body">
+                <div className="recipe-card-title">{r.name}</div>
+                <div className="recipe-card-meta">
+                  <span className={`badge ${CAT_COLORS[r.category]||'badge-gray'}`}>{MEAL_LABELS[r.category]}</span>
+                  <span className={`badge ${getDiffColor(r.difficulty)}`}>{r.difficulty}</span>
+                  <span className="badge badge-gray">⏱ {r.time}m</span>
+                </div>
+                <div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>📖 {r.source}</div>
+                <div className="recipe-card-actions">
+                  <button className="btn btn-primary btn-sm" onClick={() => setSelected(r)}>Ver receta</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => toggleFav(r.id)}>
+                    {r.favorite ? '❤️' : '🤍'}
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => deleteRecipe(r.id)} style={{color:'var(--rose)',marginLeft:'auto'}}>✕</button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div style={{gridColumn:'1/-1'}} className="empty-state">
+              <div className="es-icon">📚</div>
+              <h3>No hay recetas</h3>
+              <p>Prueba con otra búsqueda o agrega una nueva receta</p>
+              <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Agregar receta</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function InventoryPage({ inventory, setInventory }) {
+  const [newItem, setNewItem] = useState({ name:'', qty:'', unit:'unidades', emoji:'🥦', cat:'Verdulería' });
+  const [catFilter, setCatFilter] = useState("all");
+  const cats = ["all", ...Object.keys(SHOPPING_CATS)];
+
+  const addItem = () => {
+    if (!newItem.name.trim()) return;
+    setInventory(inv => [...inv, { ...newItem, id: Date.now() }]);
+    setNewItem({ name:'', qty:'', unit:'unidades', emoji:'🥦', cat:'Verdulería' });
+  };
+
+  const removeItem = (id) => setInventory(inv => inv.filter(i => i.id !== id));
+  const updateQty = (id, qty) => setInventory(inv => inv.map(i => i.id === id ? {...i, qty} : i));
+
+  const filtered = catFilter === "all" ? inventory : inventory.filter(i => i.cat === catFilter);
+  const bycat = {};
+  filtered.forEach(i => { if(!bycat[i.cat]) bycat[i.cat]=[]; bycat[i.cat].push(i); });
+
+  return (
+    <>
+      <div className="page-header">
+        <div>
+          <h2>Inventario del hogar</h2>
+          <p>{inventory.length} ingredientes registrados</p>
+        </div>
+      </div>
+      <div className="page-body">
+        <div className="card mb-16">
+          <h4 className="font-semibold mb-12" style={{fontSize:14}}>+ Agregar ingrediente manualmente</h4>
+          <div style={{display:'grid',gridTemplateColumns:'40px 1fr 80px 120px 140px auto',gap:8,alignItems:'center'}}>
+            <input className="input" value={newItem.emoji} onChange={e=>setNewItem(n=>({...n,emoji:e.target.value}))} style={{textAlign:'center',fontSize:18,padding:'4px'}} />
+            <input className="input" placeholder="Nombre del ingrediente" value={newItem.name} onChange={e=>setNewItem(n=>({...n,name:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&addItem()} />
+            <input className="input" placeholder="Cant." value={newItem.qty} onChange={e=>setNewItem(n=>({...n,qty:e.target.value}))} />
+            <input className="input" placeholder="Unidad" value={newItem.unit} onChange={e=>setNewItem(n=>({...n,unit:e.target.value}))} />
+            <select className="select" value={newItem.cat} onChange={e=>setNewItem(n=>({...n,cat:e.target.value}))}>
+              {Object.keys(SHOPPING_CATS).map(c => <option key={c} value={c}>{SHOPPING_CATS[c]} {c}</option>)}
+            </select>
+            <button className="btn btn-primary" onClick={addItem}>Agregar</button>
+          </div>
+        </div>
+
+        <div className="tabs mb-16">
+          {cats.map(c => (
+            <button key={c} className={`tab ${catFilter===c?'active':''}`} onClick={()=>setCatFilter(c)}>
+              {c==="all" ? "Todos" : `${SHOPPING_CATS[c]} ${c}`}
+            </button>
+          ))}
+        </div>
+
+        {Object.entries(bycat).map(([cat, items]) => (
+          <div key={cat} className="mb-16">
+            <div className="shopping-section-header">
+              <span className="sec-icon">{SHOPPING_CATS[cat] || '🛒'}</span>
+              <span className="sec-name">{cat}</span>
+              <span className="badge badge-gray" style={{marginLeft:'auto'}}>{items.length} items</span>
+            </div>
+            <div className="inventory-grid">
+              {items.map(item => (
+                <div key={item.id} className="inventory-item">
+                  <span className="icon">{item.emoji}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div className="name" style={{fontSize:12}}>{item.name}</div>
+                    <input className="input" value={item.qty} onChange={e=>updateQty(item.id,e.target.value)}
+                      style={{padding:'2px 6px',fontSize:11,marginTop:2,height:'auto'}} />
+                    <span style={{fontSize:10,color:'var(--text3)'}}>{item.unit}</span>
+                  </div>
+                  <button className="btn btn-ghost" style={{padding:'2px 4px',color:'var(--rose)',fontSize:12}}
+                    onClick={()=>removeItem(item.id)}>✕</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <div className="empty-state">
+            <div className="es-icon">🧊</div>
+            <h3>Inventario vacío</h3>
+            <p>Agrega ingredientes manualmente o usa la foto</p>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function ShoppingPage({ week, inventory, recipes }) {
+  const [checked, setChecked] = useState({});
+  const [extraItems, setExtraItems] = useState([]);
+  const [newExtra, setNewExtra] = useState("");
+
+
+  const shopping = generateShoppingList(week, inventory);
+  const total = Object.values(shopping).reduce((a,b) => a+b.length, 0);
+  const checkedCount = Object.values(checked).filter(Boolean).length;
+
+  const toggleCheck = key => setChecked(c => ({...c,[key]:!c[key]}));
+  const addExtra = () => {
+    if (!newExtra.trim()) return;
+    setExtraItems(e => [...e, {name:newExtra,need:1,unit:'unidad',cat:'Almacén'}]);
+    setNewExtra("");
+  };
+
+
+  const allCats = {...shopping};
+  if (extraItems.length) allCats["Extra"] = extraItems;
+
+  return (
+    <>
+      <div className="page-header">
+        <div>
+          <h2>Lista de compras</h2>
+          <p>Generada automáticamente · {checkedCount}/{total + extraItems.length} completados</p>
+        </div>
+        <div className="flex gap-8">
+          <button className="btn btn-secondary btn-sm" onClick={() => { if(window.confirm("¿Imprimir la lista?")) window.print(); }}>
+            🖨️ Imprimir
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setChecked({})}>Reiniciar</button>
+        </div>
+      </div>
+      <div className="page-body">
+        <div className="grid-2 mb-16">
+          <div className="stat-card">
+            <div className="stat-num">{total}</div>
+            <div className="stat-label">ingredientes a comprar</div>
+            <div className="progress-bar mt-8"><div className="progress-fill" style={{width:total>0?`${Math.round(checkedCount/total*100)}%`:'0%'}}></div></div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-num">{inventory.length}</div>
+            <div className="stat-label">ingredientes disponibles en casa</div>
+            <div style={{fontSize:12,color:'var(--accent2)',marginTop:4}}>✓ Ya descontados de la lista</div>
+          </div>
+        </div>
+
+        <div className="card mb-16" style={{padding:'10px 14px'}}>
+          <div className="flex gap-8 items-center">
+            <input className="input" style={{flex:1}} placeholder="Agregar ítem extra..." value={newExtra}
+              onChange={e=>setNewExtra(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addExtra()} />
+            <button className="btn btn-secondary btn-sm" onClick={addExtra}>Agregar</button>
+          </div>
+        </div>
+
+        {Object.entries(allCats).length === 0 && (
+          <div className="empty-state">
+            <div className="es-icon">🛒</div>
+            <h3>Lista vacía</h3>
+            <p>Planifica comidas para la semana y la lista se generará automáticamente</p>
+          </div>
+        )}
+
+        {Object.entries(allCats).map(([cat, items]) => (
+          <div key={cat} className="shopping-section">
+            <div className="shopping-section-header">
+              <span className="sec-icon">{SHOPPING_CATS[cat] || '📦'}</span>
+              <span className="sec-name">{cat}</span>
+              <span className="badge badge-gray" style={{marginLeft:'auto'}}>{items.filter(i=>!checked[`${cat}-${i.name}`]).length} pendientes</span>
+            </div>
+            {items.map(item => {
+              const key = `${cat}-${item.name}`;
+              const isChecked = !!checked[key];
+              return (
+                <div key={key} className={`shopping-item ${isChecked ? 'checked' : ''}`} onClick={() => toggleCheck(key)}>
+                  <div className="check">{isChecked ? '✓' : ''}</div>
+                  <span className="item-name">{item.name}</span>
+                  {item.have > 0 && <span style={{fontSize:11,color:'var(--accent2)',background:'var(--accent-bg)',padding:'1px 6px',borderRadius:4}}>Tienes: {item.have} {item.unit}</span>}
+                  <span className="item-qty">{typeof item.need === 'number' ? item.need.toFixed(item.need % 1 === 0 ? 0 : 1) : item.need} {item.unit}</span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function PrefsPage({ prefs, setPrefs }) {
+
+  const upd = (k, v) => setPrefs(p => ({...p, [k]:v}));
+  const toggleRestriction = (r) => setPrefs(p => ({...p, restrictions: p.restrictions.includes(r) ? p.restrictions.filter(x=>x!==r) : [...p.restrictions, r]}));
+  const restrictions = ["Vegetariano", "Sin gluten", "Sin lactosa", "Sin mariscos", "Bajo en azúcar", "Sin cerdo"];
+
+
+  return (
+    <>
+      <div className="page-header">
+        <div><h2>Preferencias</h2><p>Configura tu familia y restricciones</p></div>
+      </div>
+      <div className="page-body">
+        <div className="grid-2 gap-16">
+          <div>
+            <div className="card mb-16">
+              <h4 className="font-semibold mb-12" style={{fontSize:14}}>👨‍👩‍👧‍👦 Mi familia</h4>
+              <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                <div>
+                  <label className="label">Nombre de la familia</label>
+                  <input className="input" value={prefs.familyName} onChange={e=>upd('familyName',e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Cantidad de personas</label>
+                  <div className="flex gap-8">
+                    {[2,3,4,5,6].map(n => (
+                      <button key={n} className={`btn ${prefs.people===n?'btn-primary':'btn-secondary'} btn-sm`} onClick={()=>upd('people',n)}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Tiempo disponible para cocinar</label>
+                  <div className="flex gap-8">
+                    {[{k:'rapido',l:'Rápido (–30m)'},{k:'medio',l:'Medio (30-60m)'},{k:'elaborado',l:'Elaborado (+1h)'}].map(o => (
+                      <button key={o.k} className={`btn ${prefs.timeLevel===o.k?'btn-primary':'btn-secondary'} btn-sm`} onClick={()=>upd('timeLevel',o.k)} style={{fontSize:11}}>{o.l}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <h4 className="font-semibold mb-12" style={{fontSize:14}}>🚫 Restricciones alimentarias</h4>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {restrictions.map(r => (
+                  <div key={r} onClick={() => toggleRestriction(r)}
+                    style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,cursor:'pointer',
+                      background:prefs.restrictions.includes(r)?'var(--accent-bg)':'var(--bg2)',
+                      border:`1px solid ${prefs.restrictions.includes(r)?'#B8DFC8':'var(--border)'}`,fontSize:13}}>
+                    <span style={{color:prefs.restrictions.includes(r)?'var(--accent2)':'var(--text3)'}}>{prefs.restrictions.includes(r)?'✓':'○'}</span>
+                    {r}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-12">
+                <label className="label">Otras restricciones</label>
+                <input className="input" placeholder="Ej: alergia a los frutos secos..." value={prefs.otherRestrictions || ''} onChange={e=>upd('otherRestrictions',e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="card mb-16">
+              <h4 className="font-semibold mb-12" style={{fontSize:14}}>🥦 Preferencias nutricionales</h4>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {[
+                  {k:'proteinPriority',l:'Prioridad en proteínas'},
+                  {k:'vegFriendly',l:'Amigable con verduras'},
+                  {k:'mealPrep',l:'Modo Meal Prep (cocinar en batch)'},
+                  {k:'quickBreakfast',l:'Desayunos rápidos'},
+                ].map(opt => (
+                  <div key={opt.k} onClick={() => upd(opt.k, !prefs[opt.k])}
+                    style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--bg2)',borderRadius:8,cursor:'pointer'}}>
+                    <span style={{fontSize:13}}>{opt.l}</span>
+                    <div style={{width:38,height:20,borderRadius:10,background:prefs[opt.k]?'var(--accent)':'var(--border2)',position:'relative',transition:'background 0.2s'}}>
+                      <div style={{width:16,height:16,borderRadius:'50%',background:'white',position:'absolute',top:2,left:prefs[opt.k]?'auto':'2px',right:prefs[opt.k]?'2px':'auto',transition:'all 0.2s'}}></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card" style={{background:'var(--blue-bg)',border:'1px solid #B8D4F0'}}>
+              <div style={{fontWeight:700,fontSize:14,color:'var(--blue)',marginBottom:8}}>💡 Consejos generales</div>
+              <ul style={{fontSize:13,color:'var(--text2)',lineHeight:1.8,paddingLeft:16}}>
+                <li>Variá los colores en el plato — más colores = más nutrientes</li>
+                <li>Incluí una proteína en cada almuerzo y cena</li>
+                <li>Las colaciones escolares ideales: fruta + lácteo o integral</li>
+                <li>Cocinar en batch los fines de semana ahorra mucho tiempo</li>
+                <li>Reutilizá preparaciones base: arroz, pollo hervido, salsa de tomate</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+
+// ─── PERSISTENCE ──────────────────────────────────────────────────────────
+function load(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+}
+function save(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────
+function App() {
+  const [page, setPage] = useState('dashboard');
+  const [recipes, setRecipes] = useState(() => load('fm_recipes', INITIAL_RECIPES));
+  const [week, setWeek] = useState(() => load('fm_week', INITIAL_WEEK));
+  const [inventory, setInventory] = useState(() => load('fm_inventory', INITIAL_INVENTORY));
+  const [prefs, setPrefs] = useState(() => load('fm_prefs', { familyName:'Familia García', people:4, timeLevel:'medio', restrictions:[], proteinPriority:true, vegFriendly:true, mealPrep:false, quickBreakfast:true }));
+
+  useEffect(() => { save('fm_recipes', recipes); }, [recipes]);
+  useEffect(() => { save('fm_week', week); }, [week]);
+  useEffect(() => { save('fm_inventory', inventory); }, [inventory]);
+  useEffect(() => { save('fm_prefs', prefs); }, [prefs]);
+
+  const navItems = [
+    { id:'dashboard', icon:'🏠', label:'Panel' },
+    { id:'plan', icon:'📅', label:'Planificador' },
+    { id:'recipes', icon:'📚', label:'Recetas' },
+    { id:'inventory', icon:'🧊', label:'Inventario' },
+    { id:'shopping', icon:'🛒', label:'Compras' },
+    { id:'prefs', icon:'⚙️', label:'Preferencias' },
+  ];
+
+  const renderPage = () => {
+    switch(page) {
+      case 'dashboard': return <DashboardPage week={week} recipes={recipes} inventory={inventory} setPage={setPage} setWeek={setWeek} />;
+      case 'plan': return <PlanPage week={week} setWeek={setWeek} recipes={recipes} />;
+      case 'recipes': return <RecipesPage recipes={recipes} setRecipes={setRecipes} />;
+      case 'inventory': return <InventoryPage inventory={inventory} setInventory={setInventory} />;
+      case 'shopping': return <ShoppingPage week={week} inventory={inventory} recipes={recipes} />;
+      case 'prefs': return <PrefsPage prefs={prefs} setPrefs={setPrefs} />;
+      default: return null;
+    }
+  };
+
+  // ── PWA install prompt ───────────────────────────────────────────────
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [showInstall, setShowInstall] = useState(false);
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); setShowInstall(true); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+  const handleInstall = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') setShowInstall(false);
+  };
+
+  const NAV_MAIN = navItems.slice(0, 5); // show first 5 in bottom nav
+
+  return (
+    <div className="app-shell">
+      {/* ── Desktop/tablet sidebar ── */}
+      <aside className="sidebar">
+        <div className="sidebar-logo">
+          <h1>🍽️ FamilyMeal</h1>
+          <p>Planificador familiar</p>
+        </div>
+        <nav className="sidebar-nav">
+          <div className="nav-section">Principal</div>
+          {navItems.slice(0,2).map(n => (
+            <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={() => setPage(n.id)}>
+              <span className="icon">{n.icon}</span>
+              <span>{n.label}</span>
+            </button>
+          ))}
+          <div className="nav-section" style={{marginTop:8}}>Gestión</div>
+          {navItems.slice(2).map(n => (
+            <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={() => setPage(n.id)}>
+              <span className="icon">{n.icon}</span>
+              <span>{n.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-footer">
+          <div className="family-badge">
+            <div className="name">👨‍👩‍👧‍👦 {prefs.familyName}</div>
+            <div className="sub">{prefs.people} personas · {prefs.timeLevel}</div>
+          </div>
+          <button className="btn btn-ghost" style={{width:'100%',marginTop:6,fontSize:11,color:'var(--accent2)',padding:'4px',fontWeight:600}}
+            onClick={() => setPage('recipes')}>
+            📋 Importar receta con texto
+          </button>
+          <button className="btn btn-ghost" style={{width:'100%',marginTop:2,fontSize:11,color:'var(--text3)',padding:'4px'}}
+            onClick={() => { if(window.confirm('¿Resetear todos los datos al estado inicial?')) { ['fm_recipes','fm_week','fm_inventory','fm_prefs'].forEach(k=>localStorage.removeItem(k)); window.location.reload(); } }}>
+            ↺ Resetear datos
+          </button>
+          {showInstall && (
+            <button className="btn btn-primary" style={{width:'100%',marginTop:6,fontSize:11,padding:'6px'}}
+              onClick={handleInstall}>
+              📲 Instalar app
+            </button>
+          )}
+        </div>
+      </aside>
+
+      <main className="main-content">
+        {/* ── PWA install banner (mobile) ── */}
+        {showInstall && (
+          <div style={{background:'var(--accent)',color:'white',padding:'10px 16px',display:'flex',alignItems:'center',gap:10,fontSize:13}}>
+            <span style={{fontSize:20}}>📲</span>
+            <span style={{flex:1,fontWeight:500}}>Instalá FamilyMeal en tu pantalla de inicio</span>
+            <button onClick={handleInstall} style={{background:'white',color:'var(--accent2)',border:'none',borderRadius:8,padding:'5px 12px',fontWeight:700,fontSize:12,cursor:'pointer'}}>Instalar</button>
+            <button onClick={()=>setShowInstall(false)} style={{background:'none',border:'none',color:'white',fontSize:18,cursor:'pointer',padding:'0 4px'}}>✕</button>
+          </div>
+        )}
+        {renderPage()}
+      </main>
+
+      {/* ── Mobile bottom navigation bar ── */}
+      <nav className="bottom-nav">
+        {NAV_MAIN.map(n => (
+          <button key={n.id} className={`bottom-nav-item ${page===n.id?'active':''}`} onClick={() => setPage(n.id)}>
+            <span className="bn-icon">{n.icon}</span>
+            <span className="bn-label">{n.label}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
