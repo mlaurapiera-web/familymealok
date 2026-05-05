@@ -719,10 +719,14 @@ function RecipePickerModal({ onSelect, onClose, recipes, currentMeal }) {
   );
 }
 
-function AddRecipeModal({ onClose, onSave }) {
+function AddRecipeModal({ onClose, onSave, initialData = null }) {
   const EMPTY_FORM = { name:'', category:'cena', emoji:'🍽️', time:30, difficulty:'fácil', source:'Propia', tags:'', ingredients:[{name:'',qty:'1',unit:'unidad'}], steps:[''] };
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [tab, setTab] = useState('pegar');   // 'pegar' | 'manual'
+  const isEdit = !!initialData;
+  const [form, setForm] = useState(() => {
+    if (!initialData) return EMPTY_FORM;
+    return { ...initialData, tags: Array.isArray(initialData.tags) ? initialData.tags.join(', ') : (initialData.tags || '') };
+  });
+  const [tab, setTab] = useState(isEdit ? 'manual' : 'pegar');   // 'pegar' | 'manual'
   const [rawText, setRawText] = useState('');
   const [parseState, setParseState] = useState('idle'); // idle | done | error
   const [parseMsg, setParseMsg] = useState('');
@@ -737,7 +741,7 @@ function AddRecipeModal({ onClose, onSave }) {
 
   const handleSave = () => {
     if (!form.name.trim()) return alert('Ingresá el nombre de la receta');
-    const recipe = { ...form, id: Date.now(), servings: 4, favorite: false,
+    const recipe = { ...form, id: isEdit ? initialData.id : Date.now(), servings: initialData?.servings || 4, favorite: initialData?.favorite || false,
       tags: Array.isArray(form.tags) ? form.tags : form.tags.split(',').map(t=>t.trim()).filter(Boolean),
       ingredients: form.ingredients.filter(i => i.name && String(i.name).trim()),
       steps: form.steps.filter(s => s && String(s).trim()) };
@@ -786,7 +790,7 @@ Preparación:
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{maxWidth:720}}>
         <div className="modal-header">
-          <h3>Agregar Receta</h3>
+          <h3>{isEdit ? '✏️ Editar Receta' : 'Agregar Receta'}</h3>
           <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
         </div>
 
@@ -932,10 +936,10 @@ Preparación:
 
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          {tab==='pegar' ? (
+          {!isEdit && tab==='pegar' ? (
             <button className="btn btn-primary" onClick={handleParse} disabled={!rawText.trim()}>✨ Procesar texto →</button>
           ) : (
-            <button className="btn btn-primary" onClick={handleSave}>💾 Guardar Receta</button>
+            <button className="btn btn-primary" onClick={handleSave}>{isEdit ? '💾 Guardar cambios' : '💾 Guardar Receta'}</button>
           )}
         </div>
       </div>
@@ -1174,7 +1178,7 @@ function RecipesPage({ recipes, setRecipes }) {
   const [showFav, setShowFav] = useState(false);
   const [selected, setSelected] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
-
+  const [editRecipe, setEditRecipe] = useState(null);
 
   const filtered = recipes.filter(r => {
     const ms = r.name.toLowerCase().includes(search.toLowerCase()) || r.tags?.some(t=>t.includes(search.toLowerCase()));
@@ -1187,11 +1191,13 @@ function RecipesPage({ recipes, setRecipes }) {
   const toggleFav = (id) => setRecipes(rs => rs.map(r => r.id === id ? {...r, favorite: !r.favorite} : r));
   const deleteRecipe = (id) => { if(window.confirm("¿Eliminar esta receta?")) setRecipes(rs => rs.filter(r => r.id !== id)); };
   const addRecipe = (r) => setRecipes(rs => [...rs, r]);
+  const updateRecipe = (r) => setRecipes(rs => rs.map(x => x.id === r.id ? r : x));
 
   return (
     <>
       {selected && <RecipeModal recipe={selected} onClose={() => setSelected(null)} />}
       {showAdd && <AddRecipeModal onClose={() => setShowAdd(false)} onSave={addRecipe} />}
+      {editRecipe && <AddRecipeModal initialData={editRecipe} onClose={() => setEditRecipe(null)} onSave={(r) => { updateRecipe(r); setEditRecipe(null); }} />}
 
       <div className="page-header">
         <div>
@@ -1236,7 +1242,8 @@ function RecipesPage({ recipes, setRecipes }) {
                 </div>
                 <div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>📖 {r.source}</div>
                 <div className="recipe-card-actions">
-                  <button className="btn btn-primary btn-sm" onClick={() => setSelected(r)}>Ver receta</button>
+                  <button className="btn btn-primary btn-sm" onClick={() => setSelected(r)}>Ver</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setEditRecipe(r)}>✏️</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => toggleFav(r.id)}>
                     {r.favorite ? '❤️' : '🤍'}
                   </button>
